@@ -21,6 +21,7 @@
       * [Clone and Build Binary](#clone-and-build-binary)
     * [Usage](#usage)
     * [Examples](#examples)
+      * [Detailed attribute changes (-details)](#detailed-attribute-changes--details)
       * [GitHub Actions Workflow](#github-actions-workflow)
         * [Using setup-tf-summarize action](#using-setup-tf-summarize-action)
         * [Other approach](#other-approach)
@@ -107,6 +108,8 @@ $ tf-summarize -h
 
 Usage of tf-summarize [args] [tf-plan.json|tfplan]
 
+  -details
+        [Optional] show changed attributes for each resource (not supported with -json, -json-sum, -html)
   -draw
         [Optional, used only with -tree or -separate-tree] draw trees instead of plain tree
   -html
@@ -141,12 +144,62 @@ tf-summarize -json-sum tfplan                 # summary of changes in json forma
 tf-summarize -separate-tree tfplan            # summary in separate tree format
 tf-summarize -separate-tree -draw tfplan      # summary in separate 2D tree format
 tf-summarize -out=summary.md tfplan           # summary in output file instead of stdout
+tf-summarize -details tfplan                  # summary with per-resource attribute diffs
+tf-summarize -details -tree tfplan            # attribute diffs in tree format
+tf-summarize -details -md tfplan              # attribute diffs as markdown table
 
 # provide json output from plan
 terraform show -json tfplan | tf-summarize    # summary in table format
 terraform show -json tfplan > output.json
 tf-summarize output.json                      # summary in table format
 ```
+
+#### Detailed attribute changes (`-details`)
+
+The `-details` flag expands each resource entry with the specific attributes that are changing, giving you more context without having to read the full `terraform plan` output.
+
+```sh
+terraform plan -out=tfplan
+tf-summarize -details tfplan
+```
+
+Output:
+
+```
++----------+--------------------------------------------------------------+
+|  CHANGE  |                          RESOURCE                            |
++==========+==============================================================+
+| update   | azurerm_subnet.this[0]                                       |
+|          |   address_prefixes: (sensitive) -> (known after apply)       |
++          +--------------------------------------------------------------+
+|          | azurerm_subnet.this[1]                                       |
+|          |   address_prefixes: (sensitive) -> (known after apply)       |
++==========+==============================================================+
+| recreate | netbox_available_prefix.snet[0]                               |
+|          |   id: "1397" -> (known after apply)                          |
+|          |   prefix: "10.240.0.0/26" -> (known after apply)             |
+|          |   prefix_length: 26 -> 27                                    |
++          +--------------------------------------------------------------+
+|          | netbox_available_prefix.snet[1]                               |
+|          |   id: "1398" -> (known after apply)                          |
+|          |   prefix: "10.240.0.128/26" -> (known after apply)           |
+|          |   prefix_length: 26 -> 27                                    |
++==========+==============================================================+
+| delete   | azurerm_subnet.this[2]                                       |
+|          |   id: "/subscriptions/.../subnets/snet-03"                   |
++          +--------------------------------------------------------------+
+|          | netbox_available_prefix.snet[2]                               |
+|          |   id: "1396"                                                 |
++----------+--------------------------------------------------------------+
+```
+
+**Behaviour by change type:**
+
+- **update / recreate** — shows only the attributes that differ between before and after state. Computed values are shown as `(known after apply)`, sensitive values as `(sensitive)`.
+- **delete** — shows only the `id` (or `name` if no `id` is present) of the resource being destroyed, keeping the output concise.
+- **add** — shows all attributes that will be set, skipping null values.
+
+`-details` is compatible with `-tree`, `-separate-tree`, and `-md`. It is not supported with `-json`, `-json-sum`, or `-html`.
 
 #### GitHub Actions Workflow
 
