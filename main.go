@@ -24,6 +24,7 @@ func main() {
 	separateTree := flag.Bool("separate-tree", false, "[Optional] print changes in tree format for add/delete/change/recreate changes")
 	drawable := flag.Bool("draw", false, "[Optional, used only with -tree or -separate-tree] draw trees instead of plain tree")
 	md := flag.Bool("md", false, "[Optional, used only with table view] output table as markdown")
+	details := flag.Bool("details", false, "[Optional] show changed attributes for each resource (not supported with -json, -json-sum, -html)")
 	outputFileName := flag.String("out", "", "[Optional] write output to file")
 
 	flag.Usage = func() {
@@ -38,7 +39,7 @@ func main() {
 	}
 
 	args := flag.Args()
-	err := validateFlags(*tree, *separateTree, *drawable, *md, *json, *jsonSum, *html, args)
+	err := validateFlags(*tree, *separateTree, *drawable, *md, *json, *jsonSum, *html, *details, args)
 	logIfErrorAndExit("invalid input flags: %s\n", err, flag.Usage)
 
 	newReader, err := reader.CreateReader(args)
@@ -55,7 +56,7 @@ func main() {
 
 	terraformstate.FilterNoOpResources(&terraformState)
 
-	newWriter := writer.CreateWriter(*tree, *separateTree, *drawable, *md, *json, *html, *jsonSum, terraformState)
+	newWriter := writer.CreateWriter(*tree, *separateTree, *drawable, *md, *json, *html, *jsonSum, *details, terraformState)
 
 	var outputFile io.Writer = os.Stdout
 
@@ -86,7 +87,7 @@ func logIfErrorAndExit(format string, err error, callback func()) {
 	}
 }
 
-func validateFlags(tree, separateTree, drawable bool, md bool, json bool, jsonSum bool, html bool, args []string) error {
+func validateFlags(tree, separateTree, drawable bool, md bool, json bool, jsonSum bool, html bool, details bool, args []string) error {
 	if tree && md {
 		return fmt.Errorf("both -tree and -md should not be provided")
 	}
@@ -101,6 +102,9 @@ func validateFlags(tree, separateTree, drawable bool, md bool, json bool, jsonSu
 	}
 	if multipleTrueVals(md, json, html, jsonSum) {
 		return fmt.Errorf("only one of -md, -json, -json-sum, or -html should be provided")
+	}
+	if details && (json || jsonSum || html) {
+		return fmt.Errorf("-details is not supported with -json, -json-sum, or -html")
 	}
 	if len(args) > 1 {
 		return fmt.Errorf("only one argument is allowed which is filename, but got %v", args)

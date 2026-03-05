@@ -13,12 +13,12 @@ type Writer interface {
 }
 
 // CreateWriter returns a Writer based on the provided output format flags.
-func CreateWriter(tree, separateTree, drawable, mdEnabled, json, html bool, jsonSum bool, plan tfjson.Plan) Writer {
+func CreateWriter(tree, separateTree, drawable, mdEnabled, json, html bool, jsonSum bool, details bool, plan tfjson.Plan) Writer {
 	if tree {
-		return NewTreeWriter(plan.ResourceChanges, drawable)
+		return NewTreeWriter(plan.ResourceChanges, drawable, details)
 	}
 	if separateTree {
-		return NewSeparateTree(terraformstate.GetAllResourceChanges(plan), drawable)
+		return NewSeparateTree(terraformstate.GetAllResourceChanges(plan), drawable, details)
 	}
 	if json {
 		return NewJSONWriter(plan.ResourceChanges)
@@ -30,5 +30,5 @@ func CreateWriter(tree, separateTree, drawable, mdEnabled, json, html bool, json
 		return NewJSONSumWriter(terraformstate.GetAllResourceChanges(plan))
 	}
 
-	return NewTableWriter(terraformstate.GetAllResourceChanges(plan), terraformstate.GetAllOutputChanges(plan), mdEnabled)
+	return NewTableWriter(terraformstate.GetAllResourceChanges(plan), terraformstate.GetAllOutputChanges(plan), mdEnabled, details)
 }

@@ -12,6 +12,7 @@ import (
 type TreeWriter struct {
 	changes  terraformstate.ResourceChanges
 	drawable bool
+	details  bool
 }
 
 func (t TreeWriter) Write(writer io.Writer) error {
@@ -23,8 +24,8 @@ func (t TreeWriter) Write(writer io.Writer) error {
 		return err
 	}
 
-	for _, t := range trees {
-		err := printTree(writer, t, "")
+	for _, tr := range trees {
+		err := printTree(writer, tr, "", t.details)
 		if err != nil {
 			return fmt.Errorf("error writing data to %s: %s", writer, err.Error())
 		}
@@ -33,26 +34,44 @@ func (t TreeWriter) Write(writer io.Writer) error {
 }
 
 // NewTreeWriter returns a new TreeWriter.
-func NewTreeWriter(changes terraformstate.ResourceChanges, drawable bool) Writer {
-	return TreeWriter{changes: changes, drawable: drawable}
+func NewTreeWriter(changes terraformstate.ResourceChanges, drawable bool, details bool) Writer {
+	return TreeWriter{changes: changes, drawable: drawable, details: details}
 }
 
-func printTree(writer io.Writer, tree *tree.Tree, prefixSpace string) error {
+func printTree(writer io.Writer, t *tree.Tree, prefixSpace string, details bool) error {
 	var err error
 	prefixSymbol := fmt.Sprintf("%s|---", prefixSpace)
-	if tree.Value != nil {
-		colorPrefix, suffix := terraformstate.GetColorPrefixAndSuffixText(tree.Value)
-		_, err = fmt.Fprintf(writer, "%s%s%s%s%s\n", prefixSymbol, colorPrefix, tree.Name, suffix, terraformstate.ColorReset)
+	if t.Value != nil {
+		colorPrefix, suffix := terraformstate.GetColorPrefixAndSuffixText(t.Value)
+		_, err = fmt.Fprintf(writer, "%s%s%s%s%s\n", prefixSymbol, colorPrefix, t.Name, suffix, terraformstate.ColorReset)
+		if err != nil {
+			return fmt.Errorf("error writing data to %s: %s", writer, err.Error())
+		}
+		if details {
+			diffs := terraformstate.GetAttributeDiffs(t.Value)
+			detailPrefix := fmt.Sprintf("%s|\t  ", prefixSpace)
+			isDelete := t.Value.Change.Actions.Delete() && !t.Value.Change.Actions.Create()
+			for _, d := range diffs {
+				if isDelete {
+					_, err = fmt.Fprintf(writer, "%s%s: %s\n", detailPrefix, d.Key, d.Before)
+				} else {
+					_, err = fmt.Fprintf(writer, "%s%s: %s -> %s\n", detailPrefix, d.Key, d.Before, d.After)
+				}
+				if err != nil {
+					return fmt.Errorf("error writing data to %s: %s", writer, err.Error())
+				}
+			}
+		}
 	} else {
-		_, err = fmt.Fprintf(writer, "%s%s\n", prefixSymbol, tree.Name)
-	}
-	if err != nil {
-		return fmt.Errorf("error writing data to %s: %s", writer, err.Error())
+		_, err = fmt.Fprintf(writer, "%s%s\n", prefixSymbol, t.Name)
+		if err != nil {
+			return fmt.Errorf("error writing data to %s: %s", writer, err.Error())
+		}
 	}
 
-	for _, c := range tree.Children {
+	for _, c := range t.Children {
 		separator := "|"
-		err = printTree(writer, c, fmt.Sprintf("%s%s\t", prefixSpace, separator))
+		err = printTree(writer, c, fmt.Sprintf("%s%s\t", prefixSpace, separator), details)
 		if err != nil {
 			return fmt.Errorf("error writing data to %s: %s", writer, err.Error())
 		}
