@@ -43,23 +43,34 @@ func printTree(writer io.Writer, t *tree.Tree, prefixSpace string, details bool)
 	prefixSymbol := fmt.Sprintf("%s|---", prefixSpace)
 	if t.Value != nil {
 		colorPrefix, suffix := terraformstate.GetColorPrefixAndSuffixText(t.Value)
-		_, err = fmt.Fprintf(writer, "%s%s%s%s%s\n", prefixSymbol, colorPrefix, t.Name, suffix, terraformstate.ColorReset)
+		if details {
+			// Resource address: color + bold in details mode
+			_, err = fmt.Fprintf(writer, "%s%s\n",
+				prefixSymbol,
+				colorBold(t.Name+suffix, colorPrefix),
+			)
+		} else {
+			_, err = fmt.Fprintf(writer, "%s%s%s%s%s\n",
+				prefixSymbol, colorPrefix, t.Name, suffix, terraformstate.ColorReset)
+		}
 		if err != nil {
 			return fmt.Errorf("error writing data to %s: %s", writer, err.Error())
 		}
+
 		if details {
 			diffs := terraformstate.GetAttributeDiffs(t.Value)
 			detailPrefix := fmt.Sprintf("%s|\t  ", prefixSpace)
 			isCreate := t.Value.Change.Actions.Create() && !t.Value.Change.Actions.Delete()
 			isDelete := t.Value.Change.Actions.Delete() && !t.Value.Change.Actions.Create()
 			for _, d := range diffs {
+				bKey := bold(d.Key)
 				switch {
 				case isCreate:
-					_, err = fmt.Fprintf(writer, "%s%s: %s\n", detailPrefix, d.Key, d.After)
+					_, err = fmt.Fprintf(writer, "%s%s: %s\n", detailPrefix, bKey, d.After)
 				case isDelete:
-					_, err = fmt.Fprintf(writer, "%s%s: %s\n", detailPrefix, d.Key, d.Before)
+					_, err = fmt.Fprintf(writer, "%s%s: %s\n", detailPrefix, bKey, d.Before)
 				default:
-					_, err = fmt.Fprintf(writer, "%s%s: %s -> %s\n", detailPrefix, d.Key, d.Before, d.After)
+					_, err = fmt.Fprintf(writer, "%s%s: %s -> %s\n", detailPrefix, bKey, d.Before, d.After)
 				}
 				if err != nil {
 					return fmt.Errorf("error writing data to %s: %s", writer, err.Error())

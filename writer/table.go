@@ -101,16 +101,19 @@ func (t TableWriter) writeStandard(writer io.Writer) error {
 // resourceBlock holds the rendered lines for a single resource entry.
 type resourceBlock struct {
 	change      string   // change type label (first resource in group) or "" (subsequent)
-	changeColor string   // ANSI color for the change label and separators
-	lines       []string // address line + attribute diff lines
+	changeColor string   // ANSI color for this group
+	lines       []string // [0]=address, [1:]=attribute diff lines (plain key: value strings)
 	lastInGroup bool
 }
 
-// writeDetails renders the table with a custom renderer that supports:
-//   - ANSI color on change labels and group separators (option A)
-//   - Filtered, prefix-free attribute display for creates (option C)
-//   - Heavy === separators between change groups
-//   - Light --- separators between resources within a group
+// writeDetails renders the details table with full ANSI styling:
+//   - Header row/border: bold, no color
+//   - All borders/pipes/separators from first === onward: group color
+//   - Change label: color + bold
+//   - Resource address: color + bold
+//   - Attribute keys: bold only
+//   - Attribute values: plain
+//   - Heavy === between change groups, light --- between resources in group
 func (t TableWriter) writeDetails(writer io.Writer) error {
 	blocks := make([]resourceBlock, 0)
 
@@ -125,7 +128,6 @@ func (t TableWriter) writeDetails(writer io.Writer) error {
 		isDelete := change == "delete"
 
 		for i, rc := range changedResources {
-			// Resource address line
 			var addr string
 			if change == "moved" {
 				addr = fmt.Sprintf("%s to %s", rc.PreviousAddress, rc.Address)
@@ -133,25 +135,22 @@ func (t TableWriter) writeDetails(writer io.Writer) error {
 				addr = rc.Address
 			}
 
+			// lines[0] = address (plain — styled at render time)
+			// lines[1:] = "  key: value" or "  key: before -> after" (plain)
 			lines := []string{addr}
 
-			// Attribute diff lines
 			diffs := terraformstate.GetAttributeDiffs(rc)
 			for _, d := range diffs {
 				switch {
 				case isCreate:
-					// Option C: no "(none) ->" prefix, just the value
 					lines = append(lines, fmt.Sprintf("  %s: %s", d.Key, d.After))
 				case isDelete:
-					// Delete: just the id value, no arrow
 					lines = append(lines, fmt.Sprintf("  %s: %s", d.Key, d.Before))
 				default:
-					// Update / recreate: before -> after
 					lines = append(lines, fmt.Sprintf("  %s: %s -> %s", d.Key, d.Before, d.After))
 				}
 			}
 
-			// Change label only on first resource in the group
 			label := ""
 			if i == 0 {
 				label = change
@@ -170,75 +169,112 @@ func (t TableWriter) writeDetails(writer io.Writer) error {
 		return nil
 	}
 
-	// Calculate column widths (based on plain text, ignoring ANSI codes)
-	col1W := len("CHANGE")
-	col2W := len("RESOURCE")
+	// Column widths — measured on plain text so ANSI codes don't skew padding
+	col1W := utf8.RuneCountInString("CHANGE")
+	col2W := utf8.RuneCountInString("RESOURCE")
 	for _, b := range blocks {
 		if w := utf8.RuneCountInString(b.change); w > col1W {
 			col1W = w
 		}
 		for _, line := range b.lines {
+			// Measure only the visible part: for attr lines strip the leading "  key: "
+			// but we measure the whole line for column width purposes since it all goes in col2.
 			if w := utf8.RuneCountInString(line); w > col2W {
 				col2W = w
 			}
 		}
 	}
 
-	// Rendering helpers
-	//
-	// hLine builds a horizontal rule. colorStr wraps the fill characters in ANSI
-	// color so the separator itself is tinted — pass "" for uncolored lines.
-	hLine := func(left, mid, right, fill, colorStr string) string {
-		seg1 := strings.Repeat(fill, col1W+2)
-		seg2 := strings.Repeat(fill, col2W+2)
-		if colorStr != "" {
-			seg1 = colorStr + seg1 + terraformstate.ColorReset
-			seg2 = colorStr + seg2 + terraformstate.ColorReset
-		}
-		return left + seg1 + mid + seg2 + right
-	}
-
-	// row builds a table row. c1Color optionally colors the first cell content.
-	row := func(c1, c2, c1Color string) string {
-		pad1 := col1W - utf8.RuneCountInString(c1)
-		pad2 := col2W - utf8.RuneCountInString(c2)
-		cell1 := c1 + strings.Repeat(" ", pad1)
-		if c1Color != "" && c1 != "" {
-			cell1 = c1Color + c1 + terraformstate.ColorReset + strings.Repeat(" ", pad1)
-		}
-		return fmt.Sprintf("| %s | %s%s |", cell1, c2, strings.Repeat(" ", pad2))
-	}
-
 	p := func(s string) { fmt.Fprintln(writer, s) }
 
-	topLine  := hLine("+", "+", "+", "-", "")
-	botLine  := hLine("+", "+", "+", "-", "")
-	lightLine := hLine("+", "+", "+", "-", "") // resource boundary within group (no color)
+	// hLine builds a full-width horizontal rule.
+	// fill is "-" or "=". color optionally tints the fill segments and the pipes.
+	hLine := func(fill, color string) string {
+		pipe := "+"
+		seg1 := strings.Repeat(fill, col1W+2)
+		seg2 := strings.Repeat(fill, col2W+2)
+		if color != "" {
+			pipe = color + "+" + terraformstate.ColorReset
+			seg1 = color + seg1 + terraformstate.ColorReset
+			seg2 = color + seg2 + terraformstate.ColorReset
+		}
+		return pipe + seg1 + pipe + seg2 + pipe
+	}
 
-	// Header
-	p(topLine)
-	p(row("CHANGE", "RESOURCE", ""))
-	// Header separator uses no color
-	p(hLine("+", "+", "+", "=", ""))
+	// dataRow builds a data row with colored pipes.
+	// c1: left cell content (plain), c2: right cell content (plain)
+	// c1Styled: pre-styled version of c1 (with ANSI), c2Styled same for c2.
+	// pipeColor: color for | characters; "" = default.
+	dataRow := func(c1Plain, c1Styled, c2Plain, c2Styled, pipeColor string) string {
+		pad1 := col1W - utf8.RuneCountInString(c1Plain)
+		pad2 := col2W - utf8.RuneCountInString(c2Plain)
+		pipe := "|"
+		if pipeColor != "" {
+			pipe = pipeColor + "|" + terraformstate.ColorReset
+		}
+		return fmt.Sprintf("%s %s%s %s %s%s %s",
+			pipe,
+			c1Styled, strings.Repeat(" ", pad1),
+			pipe,
+			c2Styled, strings.Repeat(" ", pad2),
+			pipe,
+		)
+	}
+
+	// styleAttrLine applies bold to the key portion of an attribute line.
+	// Input format: "  key: rest" or "  key: before -> after"
+	// Returns (plainKey+rest for width, styledLine for display).
+	styleAttrLine := func(line string) string {
+		// line starts with "  " then key: value
+		trimmed := strings.TrimPrefix(line, "  ")
+		colonIdx := strings.Index(trimmed, ": ")
+		if colonIdx < 0 {
+			return line
+		}
+		key := trimmed[:colonIdx]
+		rest := trimmed[colonIdx:] // ": value"
+		return "  " + bold(key) + rest
+	}
+
+	// ── Header (bold, no color) ──────────────────────────────────────────────
+	p(hLine("-", ""))
+	p(dataRow("CHANGE", bold("CHANGE"), "RESOURCE", bold("RESOURCE"), ""))
+	// First heavy separator — no color yet (transition into first group color below)
+	p(hLine("=", ""))
+
+	currentColor := ""
 
 	for bi, b := range blocks {
-		// Address row — color the change label if this is the first in the group
-		p(row(b.change, b.lines[0], b.changeColor))
-		// Attribute detail lines — change col blank, no color on detail text
-		for _, dl := range b.lines[1:] {
-			p(row("", dl, ""))
+		// On the first row of each group, update the active color
+		if b.change != "" {
+			currentColor = b.changeColor
 		}
 
+		// ── Address row ──────────────────────────────────────────────────────
+		c1Plain := b.change
+		c1Styled := colorBold(b.change, currentColor) // colored+bold, or "" if blank
+		c2Plain := b.lines[0]
+		c2Styled := colorBold(b.lines[0], currentColor) // resource address colored+bold
+		p(dataRow(c1Plain, c1Styled, c2Plain, c2Styled, currentColor))
+
+		// ── Attribute lines ──────────────────────────────────────────────────
+		for _, dl := range b.lines[1:] {
+			styledDl := styleAttrLine(dl)
+			p(dataRow("", "", dl, styledDl, currentColor))
+		}
+
+		// ── Separator after this block ───────────────────────────────────────
 		isLast := bi == len(blocks)-1
 		if isLast {
-			p(botLine)
+			p(hLine("-", currentColor))
 		} else if b.lastInGroup {
-			// Heavy colored separator at change group boundary
-			// Use the color of the *next* block's change type for the incoming group
+			// Heavy separator; tint with the *next* group's color
 			nextColor := blocks[bi+1].changeColor
-			p(hLine("+", "+", "+", "=", nextColor))
+			p(hLine("=", nextColor))
+			currentColor = nextColor
 		} else {
-			p(lightLine) // light separator between resources in same group
+			// Light separator within the same group
+			p(hLine("-", currentColor))
 		}
 	}
 
