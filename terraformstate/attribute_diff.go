@@ -52,14 +52,24 @@ func diffForCreate(rc *tfjson.ResourceChange) []AttributeDiff {
 		return nil
 	}
 
+	// For creates, only show attributes that:
+	//   - have a concrete known value (skip "(known after apply)" — not actionable at plan time)
+	//   - are not null/empty/false (skip provider defaults and unset optionals)
+	//   - are sensitive (always shown — tells the reviewer something is configured there)
 	keys := mergedKeys(after, afterUnknown)
 	diffs := make([]AttributeDiff, 0, len(keys))
 	for _, k := range keys {
 		afterStr := formatValue(after[k], afterUnknown[k], afterSensitive[k])
-		if afterStr == "(null)" {
+		// Skip unset / empty / default values
+		if isEmptyValue(afterStr) {
 			continue
 		}
-		diffs = append(diffs, AttributeDiff{Key: k, Before: "(none)", After: afterStr})
+		// Skip computed values that are only known post-apply
+		if afterStr == "(known after apply)" {
+			continue
+		}
+		// Before is always omitted for creates (no "(none) ->" prefix)
+		diffs = append(diffs, AttributeDiff{Key: k, Before: "", After: afterStr})
 	}
 	return diffs
 }

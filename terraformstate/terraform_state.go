@@ -203,3 +203,21 @@ func filterOutputs(outputChanges map[string]*tfjson.Change, action tfjson.Action
 	}
 	return acc
 }
+
+// ChangeColor returns the ANSI color code for a given change type label.
+// Returns ColorReset if the change type is unknown.
+func ChangeColor(change string) string {
+	switch change {
+	case "add", "import":
+		return ColorGreen
+	case "delete":
+		return ColorRed
+	case "update":
+		return ColorYellow
+	case "recreate":
+		return ColorMagenta
+	case "moved":
+		return ColorCyan
+	}
+	return ColorReset
+}

@@ -50,11 +50,15 @@ func printTree(writer io.Writer, t *tree.Tree, prefixSpace string, details bool)
 		if details {
 			diffs := terraformstate.GetAttributeDiffs(t.Value)
 			detailPrefix := fmt.Sprintf("%s|\t  ", prefixSpace)
+			isCreate := t.Value.Change.Actions.Create() && !t.Value.Change.Actions.Delete()
 			isDelete := t.Value.Change.Actions.Delete() && !t.Value.Change.Actions.Create()
 			for _, d := range diffs {
-				if isDelete {
+				switch {
+				case isCreate:
+					_, err = fmt.Fprintf(writer, "%s%s: %s\n", detailPrefix, d.Key, d.After)
+				case isDelete:
 					_, err = fmt.Fprintf(writer, "%s%s: %s\n", detailPrefix, d.Key, d.Before)
-				} else {
+				default:
 					_, err = fmt.Fprintf(writer, "%s%s: %s -> %s\n", detailPrefix, d.Key, d.Before, d.After)
 				}
 				if err != nil {
