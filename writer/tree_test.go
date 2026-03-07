@@ -16,7 +16,7 @@ func TestTreeWriter_Write_DrawableTrue(t *testing.T) {
 		&tfjson.ResourceChange{Address: "module.test.azapi_resource.logical_network", Change: &tfjson.Change{Actions: tfjson.Actions{tfjson.ActionNoop}}},
 	}
 
-	tw := NewTreeWriter(changes, true, false)
+	tw := NewTreeWriter(changes, true, false, nil)
 
 	var buf bytes.Buffer
 	err := tw.Write(&buf)
@@ -53,7 +53,7 @@ func TestTreeWriter_Write_NonDrawable(t *testing.T) {
 		&tfjson.ResourceChange{Address: "module.test.azapi_resource.logical_network", Change: &tfjson.Change{Actions: tfjson.Actions{tfjson.ActionNoop}}},
 	}
 
-	tw := NewTreeWriter(changes, false, false)
+	tw := NewTreeWriter(changes, false, false, nil)
 
 	var buf bytes.Buffer
 	err := tw.Write(&buf)
@@ -78,7 +78,7 @@ func TestTreeWriter_Write_NonDrawable_PrintTreeError(t *testing.T) {
 	changes := terraformstate.ResourceChanges{
 		&tfjson.ResourceChange{Address: "module.test.azapi_resource.logical_network", Change: &tfjson.Change{Actions: tfjson.Actions{tfjson.ActionNoop}}},
 	}
-	tw := NewTreeWriter(changes, false, false)
+	tw := NewTreeWriter(changes, false, false, nil)
 	faultyWriter := &errorWriter{}
 	err := tw.Write(faultyWriter)
 	assert.Error(t, err)
@@ -88,7 +88,7 @@ func TestTreeWriter_Write_PrintTreeError(t *testing.T) {
 	changes := terraformstate.ResourceChanges{
 		&tfjson.ResourceChange{Address: "module.test.azapi_resource.logical_network", Change: &tfjson.Change{Actions: tfjson.Actions{tfjson.ActionNoop}}},
 	}
-	tw := NewTreeWriter(changes, true, false)
+	tw := NewTreeWriter(changes, true, false, nil)
 	faultyWriter := &errorWriter{}
 	err := tw.Write(faultyWriter)
 	assert.Error(t, err)
@@ -97,7 +97,7 @@ func TestTreeWriter_Write_PrintTreeError(t *testing.T) {
 
 func TestTreeWriter_Write_EmptyChanges(t *testing.T) {
 	changes := terraformstate.ResourceChanges{} // Empty changes
-	tw := NewTreeWriter(changes, false, false)
+	tw := NewTreeWriter(changes, false, false, nil)
 	var buf bytes.Buffer
 	err := tw.Write(&buf)
 
@@ -115,7 +115,7 @@ func TestTreeWriter_Write_MovedResource(t *testing.T) {
 		},
 	}
 
-	tw := NewTreeWriter(changes, false, false)
+	tw := NewTreeWriter(changes, false, false, nil)
 	var buf bytes.Buffer
 	err := tw.Write(&buf)
 

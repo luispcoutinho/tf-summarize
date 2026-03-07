@@ -22,7 +22,7 @@ func (m *mockTreeWriter) Write(_ io.Writer) error {
 	return nil
 }
 
-func NewMockTreeWriter(_ []*tfjson.ResourceChange, _ bool, _ bool) Writer {
+func NewMockTreeWriter(_ []*tfjson.ResourceChange, _ bool, _ bool, _ terraformstate.PlannedValuesMap) Writer {
 	return &mockTreeWriter{}
 }
 
@@ -33,7 +33,7 @@ func (m *mockTreeWriterWithError) Write(_ io.Writer) error {
 	return errors.New("tree writer error")
 }
 
-func NewMockTreeWriterWithError(_ []*tfjson.ResourceChange, _ bool, _ bool) Writer {
+func NewMockTreeWriterWithError(_ []*tfjson.ResourceChange, _ bool, _ bool, _ terraformstate.PlannedValuesMap) Writer {
 	return &mockTreeWriterWithError{}
 }
 
@@ -59,7 +59,7 @@ func TestSeparateTree_Write(t *testing.T) {
 	mockChanges := createMockChanges()
 
 	t.Run("Drawable True", func(t *testing.T) {
-		tw := NewSeparateTree(mockChanges, true, false)
+		tw := NewSeparateTree(mockChanges, true, false, nil)
 		var buf bytes.Buffer
 		err := tw.Write(&buf)
 
@@ -99,7 +99,7 @@ func TestSeparateTree_Write(t *testing.T) {
 	})
 
 	t.Run("Drawable False", func(t *testing.T) {
-		tw := NewSeparateTree(mockChanges, false, false)
+		tw := NewSeparateTree(mockChanges, false, false, nil)
 		var buf bytes.Buffer
 		err := tw.Write(&buf)
 
@@ -129,7 +129,7 @@ func TestSeparateTree_Write(t *testing.T) {
 			},
 		}
 
-		tw := NewSeparateTree(changesWithMoved, false, false)
+		tw := NewSeparateTree(changesWithMoved, false, false, nil)
 		var buf bytes.Buffer
 		err := tw.Write(&buf)
 
@@ -147,7 +147,7 @@ func TestSeparateTree_Write(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		s := NewSeparateTree(mockChanges, false, false)
+		s := NewSeparateTree(mockChanges, false, false, nil)
 
 		t.Run("Write Error", func(t *testing.T) {
 			mockWriter := mocks.NewMockWriter(ctrl)

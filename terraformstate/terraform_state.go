@@ -53,6 +53,38 @@ func GetColorPrefixAndSuffixText(rc *tfjson.ResourceChange) (string, string) {
 	return colorPrefix, suffix
 }
 
+// PlannedValuesMap maps resource address → (attributeValues, sensitiveValues).
+// planned_values always contains the real values with no block-level redaction,
+// so we can use it to recover values that resource_changes marks as (sensitive).
+type PlannedValuesMap map[string]*tfjson.StateResource
+
+// BuildPlannedValuesMap walks the entire PlannedValues module tree and returns
+// a flat map from resource address to StateResource.
+func BuildPlannedValuesMap(plan tfjson.Plan) PlannedValuesMap {
+	out := make(PlannedValuesMap)
+	collectStateResources(plan.PlannedValues, out)
+	return out
+}
+
+func collectStateResources(values *tfjson.StateValues, out PlannedValuesMap) {
+	if values == nil {
+		return
+	}
+	walkStateModule(values.RootModule, out)
+}
+
+func walkStateModule(mod *tfjson.StateModule, out PlannedValuesMap) {
+	if mod == nil {
+		return
+	}
+	for _, r := range mod.Resources {
+		out[r.Address] = r
+	}
+	for _, child := range mod.ChildModules {
+		walkStateModule(child, out)
+	}
+}
+
 // Parse unmarshals JSON input into a Terraform Plan.
 func Parse(input []byte) (tfjson.Plan, error) {
 	plan := tfjson.Plan{}

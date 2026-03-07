@@ -39,7 +39,7 @@ func TestTableWriter_Write_NoMarkdown(t *testing.T) {
 		},
 	}
 
-	tw := NewTableWriter(changes, outputChanges, false, false)
+	tw := NewTableWriter(changes, outputChanges, false, false, nil)
 	var output bytes.Buffer
 	err := tw.Write(&output)
 	assert.NoError(t, err)
@@ -87,7 +87,7 @@ func TestTableWriter_Write_WithMarkdown(t *testing.T) {
 		},
 	}
 
-	tw := NewTableWriter(changes, outputChanges, true, false)
+	tw := NewTableWriter(changes, outputChanges, true, false, nil)
 	var output bytes.Buffer
 	err := tw.Write(&output)
 	assert.NoError(t, err)
@@ -111,7 +111,7 @@ func TestTableWriter_NoChanges(t *testing.T) {
 	changes := map[string]terraformstate.ResourceChanges{}
 	outputChanges := map[string][]string{}
 
-	tw := NewTableWriter(changes, outputChanges, false, false)
+	tw := NewTableWriter(changes, outputChanges, false, false, nil)
 	var output bytes.Buffer
 	err := tw.Write(&output)
 	assert.NoError(t, err)

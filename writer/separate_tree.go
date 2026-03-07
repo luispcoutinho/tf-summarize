@@ -13,9 +13,10 @@ const SEPARATOR = "###################"
 
 // SeparateTree writes resource changes as separate trees grouped by action type.
 type SeparateTree struct {
-	changes  map[string](terraformstate.ResourceChanges)
-	drawable bool
-	details  bool
+	changes       map[string](terraformstate.ResourceChanges)
+	drawable      bool
+	details       bool
+	plannedValues terraformstate.PlannedValuesMap
 }
 
 // NewTreeWriterFunc is the constructor function used to create tree writers, replaceable for testing.
@@ -29,7 +30,7 @@ func (s SeparateTree) Write(writer io.Writer) error {
 			if err != nil {
 				return fmt.Errorf("error writing to %s: %s", writer, err)
 			}
-			treeWriter := NewTreeWriterFunc(v, s.drawable, s.details)
+			treeWriter := NewTreeWriterFunc(v, s.drawable, s.details, s.plannedValues)
 			err = treeWriter.Write(writer)
 			if err != nil {
 				return fmt.Errorf("error writing to %s: %s", writer, err)
@@ -44,6 +45,6 @@ func (s SeparateTree) Write(writer io.Writer) error {
 }
 
 // NewSeparateTree returns a new SeparateTree writer.
-func NewSeparateTree(changes map[string]terraformstate.ResourceChanges, drawable bool, details bool) Writer {
-	return SeparateTree{changes: changes, drawable: drawable, details: details}
+func NewSeparateTree(changes map[string]terraformstate.ResourceChanges, drawable bool, details bool, pv terraformstate.PlannedValuesMap) Writer {
+	return SeparateTree{changes: changes, drawable: drawable, details: details, plannedValues: pv}
 }
